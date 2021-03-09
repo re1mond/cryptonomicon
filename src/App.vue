@@ -107,7 +107,7 @@
           <div
             v-for="ticker in tickersList"
             :key="ticker.name"
-            @click="selectedTicker = ticker"
+            @click="selectTicker(ticker)"
             :class="selectedTicker === ticker ? 'border-4' : ''"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
@@ -141,17 +141,22 @@
           </div>
         </dl>
         <!-- / TICKER ITEM -->
-        <hr class="w-full border-t border-gray-600 my-4" />
+        <hr
+          v-if="tickersList.length > 0"
+          class="w-full border-t border-gray-600 my-4"
+        />
         <!-- CHART -->
         <section v-if="selectedTicker" class="relative">
           <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
             {{ selectedTicker.name }} - {{ fiatCurrency }}
           </h3>
           <div class="flex items-end border-gray-600 border-b border-l h-64">
-            <div class="bg-purple-800 border w-10 h-24"></div>
-            <div class="bg-purple-800 border w-10 h-32"></div>
-            <div class="bg-purple-800 border w-10 h-48"></div>
-            <div class="bg-purple-800 border w-10 h-16"></div>
+            <div
+              v-for="(bar, i) in normizlizedChartData"
+              :key="i"
+              :style="{ height: `${bar}%` }"
+              class="bg-purple-800 border w-10"
+            ></div>
           </div>
           <button
             type="button"
@@ -199,8 +204,44 @@ export default {
       selectedTicker: "",
       fiatCurrency: "USD",
 
-      tickersList: []
+      tickersList: [],
+      chartData: []
     };
+  },
+
+  computed: {
+    normizlizedChartData() {
+      let minValue = Math.min(...this.chartData);
+      let maxValue = Math.max(...this.chartData);
+
+      if (maxValue !== minValue)
+        return this.chartData.map(
+          price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+        );
+
+      return this.chartData.map(() => 50);
+    },
+
+    tickersNames() {
+      return this.tickersList.map(({ name }) => name);
+    }
+  },
+
+  created() {
+    const tickersStorage = localStorage.getItem("tickers-list");
+
+    if (tickersStorage) {
+      this.tickersList = JSON.parse(tickersStorage).map(ticker => {
+        return {
+          name: ticker.name,
+          price: "-"
+        };
+      });
+
+      this.tickersList.forEach(t => {
+        t.interval = this.subscribeToUpdates(t);
+      });
+    }
   },
 
   methods: {
@@ -211,18 +252,54 @@ export default {
         interval: null
       };
 
-      newTicker.interval = setInterval(async () => {
-        let data = await getCurrencyPrice(newTicker.name, this.fiatCurrency);
-        newTicker.price = data;
-      }, FETCH_INTERVAL);
+      newTicker.interval = this.subscribeToUpdates(newTicker);
 
       this.tickersList.push(newTicker);
+      this.updateTickersStorage(this.tickersList);
+
       this.ticker = "";
+    },
+
+    subscribeToUpdates(ticker) {
+      return setInterval(async () => {
+        let data = await getCurrencyPrice(ticker.name, this.fiatCurrency);
+        ticker.price = data;
+
+        if (this.selectedTicker.name === ticker.name) {
+          this.chartData.push(+ticker.price);
+        }
+      }, FETCH_INTERVAL);
+    },
+
+    selectTicker(ticker) {
+      if (this.selectedTicker === ticker) {
+        return (this.selectedTicker = null);
+      }
+
+      this.selectedTicker = ticker;
+      this.chartData = [];
     },
 
     removeTicker({ name, interval }) {
       clearInterval(interval);
       this.tickersList = this.tickersList.filter(t => t.name !== name);
+    },
+
+    updateTickersStorage(tickersList) {
+      localStorage.setItem(
+        "tickers-list",
+        JSON.stringify(
+          tickersList.map(t => {
+            return { name: t.name };
+          })
+        )
+      );
+    }
+  },
+
+  watch: {
+    tickersNames() {
+      this.updateTickersStorage(this.tickersList);
     }
   }
 };
