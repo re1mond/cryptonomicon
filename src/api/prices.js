@@ -11,10 +11,18 @@ async function getCurrencyPrice(coin, fiat) {
   return formatPrice(price[fiat]);
 }
 
+async function getCoinsList() {
+  return fetch(
+    "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+  ).then(response => {
+    return response.json();
+  });
+}
+
 function formatPrice(price) {
   if (price > 1) return price.toFixed(2);
 
   return price.toPrecision(2);
 }
 
-export { getCurrencyPrice };
+export { getCurrencyPrice, getCoinsList };

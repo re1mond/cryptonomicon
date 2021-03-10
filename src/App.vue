@@ -3,7 +3,7 @@
     <!-- LOADER -->
     <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
       <div
-        v-if="false"
+        v-if="!loaded"
         class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
       >
         <svg
@@ -41,7 +41,7 @@
               <div class="mt-1 relative rounded-md shadow-md">
                 <input
                   v-model="ticker"
-                  @keydown.enter="addTicker"
+                  @keydown.enter="addTicker(ticker)"
                   type="text"
                   name="wallet"
                   id="wallet"
@@ -50,30 +50,21 @@
                 />
               </div>
               <div
+                v-if="autocompleteList.length > 0"
                 class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
               >
                 <span
+                  v-for="(item, i) in autocompleteList"
+                  :key="i"
+                  @click="pushTicker(item)"
                   class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
                 >
-                  BTC
-                </span>
-                <span
-                  class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-                >
-                  DOGE
-                </span>
-                <span
-                  class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-                >
-                  BCH
-                </span>
-                <span
-                  class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-                >
-                  CHD
+                  {{ item }}
                 </span>
               </div>
-              <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+              <div v-if="isTickerExists" class="text-sm text-red-600">
+                Такой тикер уже добавлен
+              </div>
             </div>
             <!-- / TICKER INPUT -->
           </div>
@@ -81,7 +72,7 @@
           <button
             type="button"
             class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            @click="addTicker"
+            @click="addTicker(ticker)"
           >
             <!-- Heroicon name: solid/mail -->
             <svg
@@ -192,17 +183,23 @@
 </template>
 
 <script>
-import { getCurrencyPrice } from "./api/prices";
+import { getCurrencyPrice, getCoinsList } from "./api/prices";
 
 const FETCH_INTERVAL = 3000;
+
+// TODO:
+// 1. Убирать график при удалении тиккера
 
 export default {
   name: "App",
   data() {
     return {
+      loaded: false,
       ticker: "",
-      selectedTicker: "",
       fiatCurrency: "USD",
+      isTickerExists: false,
+
+      selectedTicker: "",
 
       tickersList: [],
       chartData: []
@@ -224,10 +221,50 @@ export default {
 
     tickersNames() {
       return this.tickersList.map(({ name }) => name);
+    },
+
+    autocompleteList() {
+      if (this.loaded && this.ticker) {
+        let ticker = this.ticker.trim().toLowerCase();
+
+        return Object.values(this.coinsList)
+          .filter(({ Symbol, FullName }) => {
+            return (
+              Symbol.toLowerCase().includes(ticker) ||
+              FullName.toLowerCase().includes(ticker)
+            );
+          })
+          .map(({ Symbol }) => Symbol)
+          .slice(0, 4);
+      }
+
+      return [];
     }
   },
 
-  created() {
+  watch: {
+    tickersNames() {
+      this.updateTickersStorage(this.tickersList);
+    },
+
+    ticker() {
+      if (this.isTickerExists) this.isTickerExists = false;
+    },
+
+    selectedTicker() {
+      this.chartData = [];
+    }
+  },
+
+  async created() {
+    this.coinsList = null;
+    await getCoinsList()
+      .then(coinsList => {
+        this.coinsList = coinsList.Data;
+        this.loaded = true;
+      })
+      .catch(err => console.error(err));
+
     const tickersStorage = localStorage.getItem("tickers-list");
 
     if (tickersStorage) {
@@ -245,12 +282,18 @@ export default {
   },
 
   methods: {
-    async addTicker() {
+    async addTicker(ticker) {
       const newTicker = {
-        name: this.ticker.toUpperCase(),
+        name: ticker.toUpperCase(),
         price: "-",
         interval: null
       };
+
+      if (this.tickersNames.includes(newTicker.name)) {
+        return (this.isTickerExists = true);
+      }
+
+      this.isTickerExists = false;
 
       newTicker.interval = this.subscribeToUpdates(newTicker);
 
@@ -277,12 +320,24 @@ export default {
       }
 
       this.selectedTicker = ticker;
-      this.chartData = [];
     },
 
     removeTicker({ name, interval }) {
       clearInterval(interval);
       this.tickersList = this.tickersList.filter(t => t.name !== name);
+    },
+
+    pushTicker(ticker) {
+      if (this.tickersNames.includes(ticker)) {
+        this.ticker = ticker;
+
+        // ??? Как лучше...
+        this.$nextTick(() => {
+          this.isTickerExists = true;
+        });
+      } else {
+        this.addTicker(ticker);
+      }
     },
 
     updateTickersStorage(tickersList) {
@@ -294,12 +349,6 @@ export default {
           })
         )
       );
-    }
-  },
-
-  watch: {
-    tickersNames() {
-      this.updateTickersStorage(this.tickersList);
     }
   }
 };
