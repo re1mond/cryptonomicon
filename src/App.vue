@@ -188,7 +188,6 @@ import { getCurrencyPrice, getCoinsList } from "./api/prices";
 const FETCH_INTERVAL = 3000;
 
 // TODO:
-// 1. Убирать график при удалении тиккера
 
 export default {
   name: "App",
@@ -245,6 +244,10 @@ export default {
   watch: {
     tickersNames() {
       this.updateTickersStorage(this.tickersList);
+
+      if (!this.tickersNames.includes(this.selectedTicker?.name)) {
+        this.selectedTicker = null;
+      }
     },
 
     ticker() {
@@ -308,7 +311,7 @@ export default {
         let data = await getCurrencyPrice(ticker.name, this.fiatCurrency);
         ticker.price = data;
 
-        if (this.selectedTicker.name === ticker.name) {
+        if (this.selectedTicker?.name === ticker.name) {
           this.chartData.push(+ticker.price);
         }
       }, FETCH_INTERVAL);
