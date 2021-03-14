@@ -28,7 +28,7 @@
         </svg>
       </div>
       <!-- / LOADER -->
-      <div class="container">
+      <div v-else class="container">
         <section>
           <div class="flex">
             <!-- TICKER INPUT -->
@@ -93,10 +93,68 @@
         </section>
 
         <hr class="w-full border-t border-gray-600 my-4" />
+        <nav
+          class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px"
+          aria-label="Pagination"
+        >
+          <a
+            @click.prevent="goPrevPage"
+            href="#"
+            class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            <span class="sr-only">Previous</span>
+            <!-- Heroicon name: solid/chevron-left -->
+            <svg
+              class="h-5 w-5"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </a>
+          <a
+            v-for="page in pagesCount"
+            :key="page"
+            @click="currentPage = page"
+            href="#"
+            class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+            :class="{ 'bg-gray-200': currentPage === page }"
+          >
+            {{ page }}
+          </a>
+          <a
+            @click.prevent="goNextPage"
+            href="#"
+            class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            <span class="sr-only">Next</span>
+            <svg
+              class="h-5 w-5"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </a>
+        </nav>
+
+        <hr class="w-full border-t border-gray-600 my-4" />
         <!-- TICKER ITEM -->
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="ticker in tickersList"
+            v-for="ticker in tickersToShow"
             :key="ticker.name"
             @click="selectTicker(ticker)"
             :class="selectedTicker === ticker ? 'border-4' : ''"
@@ -201,7 +259,9 @@ export default {
       selectedTicker: "",
 
       tickersList: [],
-      chartData: []
+      chartData: [],
+      currentPage: 1,
+      maxTickersOnPage: 6
     };
   },
 
@@ -238,6 +298,17 @@ export default {
       }
 
       return [];
+    },
+
+    pagesCount() {
+      return Math.ceil(this.tickersList.length / this.maxTickersOnPage);
+    },
+
+    tickersToShow() {
+      let start = (this.currentPage - 1) * this.maxTickersOnPage;
+      let end = start + this.maxTickersOnPage;
+
+      return this.tickersList.slice(start, end);
     }
   },
 
@@ -303,6 +374,7 @@ export default {
       this.tickersList.push(newTicker);
       this.updateTickersStorage(this.tickersList);
 
+      this.currentPage = this.pagesCount;
       this.ticker = "";
     },
 
@@ -352,6 +424,18 @@ export default {
           })
         )
       );
+    },
+
+    goNextPage() {
+      if (this.pagesCount !== this.currentPage) {
+        this.currentPage++;
+      }
+    },
+
+    goPrevPage() {
+      if (this.currentPage !== 1) {
+        this.currentPage--;
+      }
     }
   }
 };
