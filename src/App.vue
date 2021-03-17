@@ -165,7 +165,7 @@
                 {{ ticker.name }} - {{ fiatCurrency }}
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ ticker.price }}
+                {{ formatPrice(ticker.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -241,11 +241,11 @@
 </template>
 
 <script>
-import { getCurrencyPrice, getCoinsList } from "./api/prices";
-
-const FETCH_INTERVAL = 3000;
-
-// TODO:
+import {
+  getCoinsList,
+  subscribeToTicker,
+  unsubscribeFromTicker
+} from "./api/prices";
 
 export default {
   name: "App",
@@ -350,7 +350,9 @@ export default {
       });
 
       this.tickersList.forEach(t => {
-        t.interval = this.subscribeToUpdates(t);
+        subscribeToTicker(t.name, newPrice => {
+          this.updateTicker(t.name, newPrice);
+        });
       });
     }
   },
@@ -359,34 +361,35 @@ export default {
     async addTicker(ticker) {
       const newTicker = {
         name: ticker.toUpperCase(),
-        price: "-",
-        interval: null
+        price: "-"
       };
 
       if (this.tickersNames.includes(newTicker.name)) {
         return (this.isTickerExists = true);
       }
-
       this.isTickerExists = false;
 
-      newTicker.interval = this.subscribeToUpdates(newTicker);
-
       this.tickersList.push(newTicker);
+      subscribeToTicker(newTicker.name, newPrice =>
+        this.updateTicker(newTicker.name, newPrice)
+      );
+
       this.updateTickersStorage(this.tickersList);
 
       this.currentPage = this.pagesCount;
       this.ticker = "";
     },
 
-    subscribeToUpdates(ticker) {
-      return setInterval(async () => {
-        let data = await getCurrencyPrice(ticker.name, this.fiatCurrency);
-        ticker.price = data;
+    updateTicker(tickerName, newPrice) {
+      const tickerToUpdate = this.tickersList.find(
+        ({ name }) => name === tickerName
+      );
 
-        if (this.selectedTicker?.name === ticker.name) {
-          this.chartData.push(+ticker.price);
-        }
-      }, FETCH_INTERVAL);
+      tickerToUpdate.price = newPrice;
+
+      if (tickerName === this.selectedTicker?.name) {
+        this.chartData.push(newPrice);
+      }
     },
 
     selectTicker(ticker) {
@@ -397,9 +400,9 @@ export default {
       this.selectedTicker = ticker;
     },
 
-    removeTicker({ name, interval }) {
-      clearInterval(interval);
+    removeTicker({ name }) {
       this.tickersList = this.tickersList.filter(t => t.name !== name);
+      unsubscribeFromTicker(name);
     },
 
     pushTicker(ticker) {
@@ -424,6 +427,13 @@ export default {
           })
         )
       );
+    },
+
+    formatPrice(price) {
+      if (price === "-") return;
+      if (price > 1) return price.toFixed(2);
+
+      return price.toPrecision(2);
     },
 
     goNextPage() {
