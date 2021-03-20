@@ -203,11 +203,15 @@
           <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
             {{ selectedTicker.name }} - {{ fiatCurrency }}
           </h3>
-          <div class="flex items-end border-gray-600 border-b border-l h-64">
+          <div
+            ref="chart"
+            class="flex items-end border-gray-600 border-b border-l h-64"
+          >
             <div
               v-for="(bar, i) in normizlizedChartData"
               :key="i"
-              :style="{ height: `${bar}%` }"
+              :style="{ height: `${bar}%`, width: `${barItemWidth}px` }"
+              ref="bar"
               class="bg-purple-800 border w-10"
             ></div>
           </div>
@@ -265,7 +269,9 @@ export default {
       tickersList: [],
       chartData: [],
       currentPage: 1,
-      maxTickersOnPage: 6
+      maxTickersOnPage: 6,
+      maxBarItems: 1,
+      barItemWidth: 38
     };
   },
 
@@ -331,6 +337,14 @@ export default {
 
     selectedTicker() {
       this.chartData = [];
+
+      this.$nextTick().then(this.calculateMaxBarsCount);
+    },
+
+    pagesCount() {
+      if (this.currentPage > this.pagesCount) {
+        this.currentPage = this.pagesCount;
+      }
     }
   },
 
@@ -359,6 +373,14 @@ export default {
         });
       });
     }
+  },
+
+  mounted() {
+    window.addEventListener("resize", this.calculateMaxBarsCount);
+  },
+
+  beforeDestroy() {
+    window.removeEventListener("resize", this.calculateMaxBarsCount);
   },
 
   methods: {
@@ -390,6 +412,10 @@ export default {
         ({ name }) => name === tickerName
       );
 
+      if (!tickerToUpdate) {
+        return;
+      }
+
       if (tickerMsg.type === "error") {
         tickerToUpdate.invalid = true;
         return;
@@ -402,6 +428,10 @@ export default {
       tickerToUpdate.price = tickerMsg.price;
 
       if (tickerName === this.selectedTicker?.name) {
+        while (this.chartData.length > this.maxBarItems) {
+          this.chartData.shift();
+        }
+
         this.chartData.push(tickerMsg.price);
       }
     },
@@ -423,8 +453,7 @@ export default {
       if (this.tickersNames.includes(ticker)) {
         this.ticker = ticker;
 
-        // ??? Как лучше...
-        this.$nextTick(() => {
+        this.$nextTick().then(() => {
           this.isTickerExists = true;
         });
       } else {
@@ -448,6 +477,14 @@ export default {
       if (price > 1) return price.toFixed(2);
 
       return price.toPrecision(2);
+    },
+
+    calculateMaxBarsCount() {
+      if (!this.$refs.chart) {
+        return;
+      }
+
+      this.maxBarItems = this.$refs.chart.clientWidth / this.barItemWidth;
     },
 
     goNextPage() {
