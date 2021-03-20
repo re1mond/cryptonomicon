@@ -157,8 +157,12 @@
             v-for="ticker in tickersToShow"
             :key="ticker.name"
             @click="selectTicker(ticker)"
-            :class="selectedTicker === ticker ? 'border-4' : ''"
-            class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
+            :class="{
+              'border-4': selectedTicker === ticker,
+              'bg-red-100': ticker.invalid,
+              'bg-white': !ticker.invalid
+            }"
+            class="overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">
@@ -350,8 +354,8 @@ export default {
       });
 
       this.tickersList.forEach(t => {
-        subscribeToTicker(t.name, newPrice => {
-          this.updateTicker(t.name, newPrice);
+        subscribeToTicker({ fsym: t.name, tsym: "USD" }, tickerMsg => {
+          this.updateTicker(t.name, tickerMsg);
         });
       });
     }
@@ -370,8 +374,9 @@ export default {
       this.isTickerExists = false;
 
       this.tickersList.push(newTicker);
-      subscribeToTicker(newTicker.name, newPrice =>
-        this.updateTicker(newTicker.name, newPrice)
+
+      subscribeToTicker({ fsym: newTicker.name, tsym: "USD" }, tickerMsg =>
+        this.updateTicker(newTicker.name, tickerMsg)
       );
 
       this.updateTickersStorage(this.tickersList);
@@ -380,15 +385,24 @@ export default {
       this.ticker = "";
     },
 
-    updateTicker(tickerName, newPrice) {
+    updateTicker(tickerName, tickerMsg) {
       const tickerToUpdate = this.tickersList.find(
         ({ name }) => name === tickerName
       );
 
-      tickerToUpdate.price = newPrice;
+      if (tickerMsg.type === "error") {
+        tickerToUpdate.invalid = true;
+        return;
+      }
+
+      if (tickerMsg.type === "pending") {
+        return;
+      }
+
+      tickerToUpdate.price = tickerMsg.price;
 
       if (tickerName === this.selectedTicker?.name) {
-        this.chartData.push(newPrice);
+        this.chartData.push(tickerMsg.price);
       }
     },
 
@@ -430,7 +444,7 @@ export default {
     },
 
     formatPrice(price) {
-      if (price === "-") return;
+      if (price === "-") return price;
       if (price > 1) return price.toFixed(2);
 
       return price.toPrecision(2);

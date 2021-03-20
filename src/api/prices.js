@@ -13,25 +13,71 @@ async function getCoinsList() {
 }
 
 const tickersHandlers = {};
+let tickersToConvert = [];
+let aliveConnections = [];
+
 const socket = new WebSocket(`${SOCKET_URL}?api_key=${API_KEY}`);
 
 socket.addEventListener("message", msg => {
   const UPDATE_TYPE = "5";
-  const { TYPE: type, FROMSYMBOL: currency, PRICE: newPrice } = JSON.parse(
-    msg.data
-  );
+  const INVALID_SUB_TYPE = "500";
+
+  const {
+    TYPE: type,
+    FROMSYMBOL: currency,
+    PRICE: newPrice,
+    PARAMETER: parameter
+  } = JSON.parse(msg.data);
 
   if (type === UPDATE_TYPE && newPrice !== undefined) {
+    if (!aliveConnections.includes(currency)) {
+      aliveConnections.push(currency);
+    }
+
     const handlers = tickersHandlers[currency] ?? [];
-    handlers.forEach(handler => handler(newPrice));
+    handlers.forEach(handler => handler({ price: newPrice, type: "success" }));
+  }
+
+  if (type === INVALID_SUB_TYPE) {
+    const missedCurrency = parameter.split("~")[2];
+
+    // Если тиккер был добавлен на конвертаци - возращаем ошибку
+    if (tickersToConvert.includes(missedCurrency)) {
+      const handlers = tickersHandlers[missedCurrency] ?? [];
+      handlers.forEach(handler => handler({ type: "error" }));
+      return;
+    }
+
+    // Если тиккер не добавлен на ковертацию - добавляем
+    tickersToConvert.push(missedCurrency);
+    const handlers = tickersHandlers[missedCurrency] ?? [];
+    handlers.forEach(handler => handler({ type: "pending" }));
+
+    // Подписываем на обновление тиккера к битку
+    subscribeToTicker({ fsym: missedCurrency, tsym: "BTC" }, updateMsg => {
+      if (updateMsg.type === "success") {
+        subscribeToTicker(
+          { fsym: "BTC", tsym: "USD" },
+          ({ price: btcPrice }) => {
+            handlers.forEach(handler =>
+              handler({ type: "success", price: btcPrice * updateMsg.price })
+            );
+          }
+        );
+
+        tickersToConvert = tickersToConvert.filter(
+          ticker => ticker !== missedCurrency
+        );
+      }
+    });
   }
 });
 
-function subscribeToTicker(ticker, cb) {
-  const subscribers = tickersHandlers[ticker] || [];
-  tickersHandlers[ticker] = [...subscribers, cb];
+function subscribeToTicker({ fsym, tsym }, cb) {
+  const subscribers = tickersHandlers[fsym] || [];
+  tickersHandlers[fsym] = [...subscribers, cb];
 
-  subscribeToTickerOnSocket(ticker);
+  subscribeToTickerOnSocket(fsym, tsym);
 }
 
 function unsubscribeFromTicker(ticker) {
@@ -55,10 +101,14 @@ function sendToSocket(message) {
   );
 }
 
-function subscribeToTickerOnSocket(ticker) {
+function subscribeToTickerOnSocket(ticker, tsym) {
+  if (aliveConnections.includes(ticker)) {
+    return;
+  }
+
   const msgToSend = JSON.stringify({
     action: "SubAdd",
-    subs: [`5~CCCAGG~${ticker}~USD`]
+    subs: [`5~CCCAGG~${ticker}~${tsym}`]
   });
 
   sendToSocket(msgToSend);
@@ -72,5 +122,7 @@ function unsubscribeFromTickerOnSocket(ticker) {
 
   sendToSocket(msgToSend);
 }
+
+window.a = tickersToConvert;
 
 export { getCoinsList, subscribeToTicker, unsubscribeFromTicker };
